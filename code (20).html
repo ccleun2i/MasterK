@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master K - AI Stock Advisor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        header h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        header p {
+            color: #555;
+            font-size: 1.1em;
+        }
+        .input-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #34495e;
+        }
+        .input-section input[type="text"] {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        .input-section button {
+            padding: 12px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+            width: 100%; /* Make button full width */
+        }
+        .input-section button:hover {
+            background-color: #2980b9;
+        }
+        .input-section button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .output-section {
+            margin-top: 30px;
+        }
+        .output-section h3 {
+            color: #34495e;
+            margin-bottom: 10px;
+        }
+        #loading {
+            display: none; /* Hidden by default */
+            text-align: center;
+            padding: 15px;
+            color: #555;
+            font-style: italic;
+        }
+        #result {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+            border: 1px solid #dcdcdc;
+            white-space: pre-wrap; /* Preserve line breaks from AI */
+            word-wrap: break-word; /* Prevent long text overflow */
+            color: #333;
+            font-size: 0.95em;
+        }
+         #error {
+            color: #e74c3c;
+            background-color: #fdeded;
+            border: 1px solid #e74c3c;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            display: none; /* Hidden by default */
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* Simple responsive adjustments */
+         @media (min-width: 600px) {
+            .input-section {
+                 display: flex;
+                 align-items: flex-end; /* Align items to bottom for better look */
+                 gap: 15px; /* Add space between elements */
+             }
+             .input-section label {
+                 margin-bottom: 0; /* Remove bottom margin when inline */
+             }
+             .input-section .input-wrapper {
+                 flex-grow: 1; /* Allow input field to take available space */
+             }
+              .input-section input[type="text"] {
+                 margin-bottom: 0; /* Remove bottom margin when inline */
+                 width: calc(100% - 22px); /* Adjust width */
+             }
+             .input-section button {
+                 width: auto; /* Allow button to size based on content */
+                 flex-shrink: 0; /* Prevent button from shrinking */
+             }
+         }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Master K</h1>
+            <p>Your AI-Powered Stock Analysis Assistant</p>
+            <p>Enter a stock ticker symbol (e.g., AAPL, GOOGL) or a company name (e.g., Apple, Microsoft) below and let Master K provide you with insights.</p>
+        </header>
+
+        <section class="input-section" id="input-form">
+             <!-- Wrapper for label and input for flexbox layout -->
+            <div class="input-wrapper">
+                <label for="stockInput">Stock Code / Company Name:</label>
+                <input type="text" id="stockInput" placeholder="e.g., TSLA or Tesla Inc.">
+            </div>
+            <button id="analyzeButton">Analyze</button>
+        </section>
+
+        <section class="output-section">
+            <h3>Analysis Result:</h3>
+            <div id="loading">Analyzing, please wait... <span class="spinner"></span></div>
+            <div id="error"></div>
+            <div id="result">
+                <p>Analysis will appear here once you enter a stock and click "Analyze".</p>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        const analyzeButton = document.getElementById('analyzeButton');
+        const stockInput = document.getElementById('stockInput');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // --- API Configuration ---
+        const apiUrl = 'https://api.coze.com/v3/chat';
+        // !!!!! SECURITY WARNING !!!!!
+        // NEVER expose your API key like this in a real-world public frontend application.
+        // Use a backend proxy server to protect your key.
+        const apiKey = 'Bearer pat_kBTNnTtofw5Y138yCgBDDnqdowOoLrWQBojAQURDMaQ5YvPgwzYq0LcXg6KsjGJP';
+        const botId = '7488284230468911109';
+        const userId = 'user_browser_session_' + Date.now(); // Simple unique ID for user session
+
+        analyzeButton.addEventListener('click', async () => {
+            const stockQuery = stockInput.value.trim();
+
+            if (!stockQuery) {
+                displayError('Please enter a stock code or company name.');
+                return;
+            }
+
+            // Reset UI
+            resultDiv.innerHTML = '<p>Analysis will appear here...</p>'; // Clear previous result
+            resultDiv.style.display = 'block';
+            errorDiv.style.display = 'none'; // Hide previous error
+            loadingDiv.style.display = 'block';
+            analyzeButton.disabled = true; // Disable button during request
+            analyzeButton.textContent = 'Analyzing...';
+
+            // --- Prepare API Request Body ---
+            const requestBody = {
+                bot_id: botId,
+                user_id: userId, // Use the generated user ID
+                stream: false,   // We want the full response at once
+                auto_save_history: true, // Keep history on Coze (as per your example)
+                additional_messages: [
+                    {
+                        role: "user",
+                        // Make the prompt specific for better results
+                        content: `Please provide a stock analysis for: ${stockQuery}`,
+                        content_type: "text"
+                    }
+                ]
+            };
+
+            try {
+                // --- Make API Call ---
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': apiKey, // Key includes "Bearer " prefix
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json' // Explicitly accept JSON
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                // --- Handle API Response ---
+                if (!response.ok) {
+                    // Try to get more detailed error from response body
+                    let errorText = `API request failed with status ${response.status}`;
+                    try {
+                         const errorData = await response.json();
+                         errorText += `: ${errorData.message || JSON.stringify(errorData)}`;
+                    } catch (e) {
+                         // If response is not JSON, use text
+                         errorText += `: ${await response.text()}`;
+                    }
+                    throw new Error(errorText);
+                }
+
+                const data = await response.json();
+
+                // --- Extract and Display Result ---
+                // Find the assistant's message in the response
+                // Coze API v3 usually puts the latest messages at the end
+                 const assistantMessage = data.messages?.find(msg => msg.type === 'answer'); // Or check msg.role === 'assistant'
+
+                if (assistantMessage && assistantMessage.content) {
+                    // Use innerText to prevent potential HTML injection issues if the AI includes HTML tags
+                    resultDiv.innerText = assistantMessage.content;
+                } else {
+                    // Handle cases where the response structure might be different or no content found
+                    console.warn("Could not find assistant content in the expected format. Response:", data);
+                    resultDiv.innerText = 'Received a response, but could not extract the analysis content. Please check the console for details.';
+                }
+
+            } catch (error) {
+                console.error('Error fetching analysis:', error);
+                displayError(`An error occurred while fetching the analysis: ${error.message}`);
+                resultDiv.style.display = 'none'; // Hide result area on error
+            } finally {
+                // --- Reset UI after completion or error ---
+                loadingDiv.style.display = 'none';
+                analyzeButton.disabled = false; // Re-enable button
+                analyzeButton.textContent = 'Analyze';
+            }
+        });
+
+        // Helper function to display errors
+        function displayError(message) {
+            errorDiv.innerText = message;
+            errorDiv.style.display = 'block';
+            loadingDiv.style.display = 'none'; // Hide loading if error occurs
+            resultDiv.style.display = 'none'; // Hide result area on input error
+            analyzeButton.disabled = false; // Re-enable button
+            analyzeButton.textContent = 'Analyze';
+        }
+
+         // Optional: Allow pressing Enter in the input field to trigger analysis
+         stockInput.addEventListener('keypress', function(event) {
+             if (event.key === 'Enter') {
+                 event.preventDefault(); // Prevent default form submission if it were in a form
+                 analyzeButton.click(); // Trigger the button's click event
+             }
+         });
+
+    </script>
+
+</body>
+</html>
