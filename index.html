@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master K - AI Stock Advisor</title>
+    <style>
+        /* ... (Keep the CSS styles from the previous version) ... */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        header h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        header p {
+            color: #555;
+            font-size: 1.1em;
+        }
+        .input-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #34495e;
+        }
+        .input-section input[type="text"] {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        .input-section button {
+            padding: 12px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+            width: 100%; /* Make button full width */
+        }
+        .input-section button:hover {
+            background-color: #2980b9;
+        }
+        .input-section button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .output-section {
+            margin-top: 30px;
+        }
+        .output-section h3 {
+            color: #34495e;
+            margin-bottom: 10px;
+        }
+        #loading {
+            display: none; /* Hidden by default */
+            text-align: center;
+            padding: 15px;
+            color: #555;
+            font-style: italic;
+        }
+        #result {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+            border: 1px solid #dcdcdc;
+            white-space: pre-wrap; /* Preserve line breaks from AI */
+            word-wrap: break-word; /* Prevent long text overflow */
+            color: #333;
+            font-size: 0.95em;
+        }
+         #error {
+            color: #e74c3c;
+            background-color: #fdeded;
+            border: 1px solid #e74c3c;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            display: none; /* Hidden by default */
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* Simple responsive adjustments */
+         @media (min-width: 600px) {
+            .input-section {
+                 display: flex;
+                 align-items: flex-end; /* Align items to bottom for better look */
+                 gap: 15px; /* Add space between elements */
+             }
+             .input-section label {
+                 margin-bottom: 0; /* Remove bottom margin when inline */
+             }
+             .input-section .input-wrapper {
+                 flex-grow: 1; /* Allow input field to take available space */
+             }
+              .input-section input[type="text"] {
+                 margin-bottom: 0; /* Remove bottom margin when inline */
+                 width: calc(100% - 22px); /* Adjust width */
+             }
+             .input-section button {
+                 width: auto; /* Allow button to size based on content */
+                 flex-shrink: 0; /* Prevent button from shrinking */
+             }
+         }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Master K</h1>
+            <p>Your AI-Powered Stock Analysis Assistant</p>
+            <p>Enter a stock ticker symbol (e.g., AAPL, GOOGL) or a company name (e.g., Apple, Microsoft) below and let Master K provide you with insights.</p>
+        </header>
+
+        <section class="input-section" id="input-form">
+             <!-- Wrapper for label and input for flexbox layout -->
+            <div class="input-wrapper">
+                <label for="stockInput">Stock Code / Company Name:</label>
+                <input type="text" id="stockInput" placeholder="e.g., TSLA or Tesla Inc.">
+            </div>
+            <button id="analyzeButton">Analyze</button>
+        </section>
+
+        <section class="output-section">
+            <h3>Analysis Result:</h3>
+            <div id="loading">Analyzing, please wait... <span class="spinner"></span></div>
+            <div id="error"></div>
+            <div id="result">
+                <p>Analysis will appear here once you enter a stock and click "Analyze".</p>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        const analyzeButton = document.getElementById('analyzeButton');
+        const stockInput = document.getElementById('stockInput');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // --- API Configuration ---
+        const apiUrl = 'https://api.coze.com/v3/chat';
+        // !!!!! SECURITY WARNING !!!!!
+        // DO NOT expose your API key like this in a real-world public frontend application.
+        const apiKey = 'pat_kBTNnTtofw5Y138yCgBDDnqdowOoLrWQBojAQURDMaQ5YvPgwzYq0LcXg6KsjGJP'; // Ensure NO extra spaces
+        const botId = '7488284230468911109'; // Ensure NO extra spaces or quotes inside
+        // Generate a slightly more robust unique ID for the user for this session
+        const userId = 'web_user_' + Math.random().toString(36).substring(2, 15);
+
+        analyzeButton.addEventListener('click', handleAnalysisRequest);
+        stockInput.addEventListener('keypress', function(event) {
+             if (event.key === 'Enter') {
+                 event.preventDefault();
+                 handleAnalysisRequest(); // Call the main handler function
+             }
+         });
+
+        async function handleAnalysisRequest() {
+            const stockQuery = stockInput.value.trim();
+
+            if (!stockQuery) {
+                displayError('Please enter a stock code or company name.');
+                return;
+            }
+
+            // Reset UI
+            resultDiv.innerHTML = '<p>Analysis will appear here...</p>';
+            resultDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = 'Analyzing...';
+            console.log(`Requesting analysis for: ${stockQuery}`); // Debug log
+
+            // --- Prepare API Request Body ---
+            // Carefully structure the request body as per the curl example
+            const requestBody = {
+                bot_id: botId,
+                user_id: userId,
+                stream: false,
+                auto_save_history: true, // As per your example
+                // IMPORTANT: Use 'query' according to some Coze docs,
+                // but your example used 'additional_messages'. Stick to your example first.
+                // If it fails, try replacing 'additional_messages' with:
+                // query: `Please provide a stock analysis for: ${stockQuery}`,
+                additional_messages: [
+                    {
+                        role: "user",
+                        content: `Provide a stock analysis for ${stockQuery}`, // Keep content direct
+                        content_type: "text"
+                    }
+                ]
+            };
+
+            console.log("Request Body:", JSON.stringify(requestBody, null, 2)); // Debug log: Show the exact body
+            console.log("Authorization Header:", `Bearer ${apiKey}`); // Debug log: Show the exact header value
+
+            try {
+                // --- Make API Call ---
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        // Ensure the 'Bearer ' prefix has exactly one space
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json' // Good practice to specify expected response type
+                    },
+                    body: JSON.stringify(requestBody) // Make sure the body is stringified JSON
+                });
+
+                console.log("API Response Status:", response.status); // Debug log: Show status code
+
+                // --- Handle API Response ---
+                if (!response.ok) {
+                    // Attempt to read error details from the response body
+                    let errorData = null;
+                    let errorText = `API Error: ${response.status} ${response.statusText}`;
+                    try {
+                         // Try cloning the response to read text/json without consuming the body
+                         const responseClone = response.clone();
+                         try {
+                            errorData = await response.json();
+                            errorText += `\nDetails: ${JSON.stringify(errorData)}`;
+                         } catch (jsonError) {
+                             // If it's not JSON, read as text
+                             errorText += `\nResponse body: ${await responseClone.text()}`;
+                         }
+                    } catch (e) {
+                         console.error("Could not read error response body:", e);
+                    }
+                    console.error("API Error Details:", errorText); // Log detailed error
+                    throw new Error(`Request failed with status ${response.status}. Check console for details.`);
+                }
+
+                // If response is OK (status 2xx)
+                const data = await response.json();
+                console.log("API Response Data:", data); // Debug log: Show the full successful response
+
+                // --- Extract and Display Result ---
+                // Coze V3 often puts the latest answer in the messages array
+                 let assistantContent = null;
+                 if (data.messages && Array.isArray(data.messages)) {
+                    // Find the last message of type 'answer' or role 'assistant'
+                    for (let i = data.messages.length - 1; i >= 0; i--) {
+                        const msg = data.messages[i];
+                         // Use 'answer' type primarily based on Coze examples
+                         if (msg.type === 'answer' && msg.content) {
+                             assistantContent = msg.content;
+                             break;
+                         }
+                         // Fallback check for role if type isn't 'answer'
+                         if (msg.role === 'assistant' && msg.content) {
+                             assistantContent = msg.content;
+                             break;
+                         }
+                    }
+                } else if (data.answer && typeof data.answer === 'string') {
+                    // Check if the answer is directly in an 'answer' field (less common for V3 chat)
+                    assistantContent = data.answer;
+                }
+
+
+                if (assistantContent) {
+                    // Use innerText to avoid rendering potential HTML from the AI response
+                    resultDiv.innerText = assistantContent;
+                } else {
+                     console.warn("Could not find assistant content in the expected format. Full response:", data);
+                     // Display the raw JSON if no answer found, helps debugging
+                    resultDiv.innerText = 'Received a response, but could not extract the analysis content. See console (F12) for the raw response data.';
+                     displayError("Failed to parse the analysis from the API response.", false); // Display a user-friendly error but keep the raw data visible
+                }
+
+            } catch (error) {
+                console.error('Error during fetch operation:', error); // Catch network errors or JS errors during fetch
+                // Display a user-friendly error message. The detailed error is in the console.
+                displayError(`An error occurred: ${error.message}. Please check the browser console (F12) for more details. Common issues include network problems or CORS restrictions if running locally.`);
+                resultDiv.style.display = 'none'; // Hide result area on error
+            } finally {
+                // --- Reset UI after completion or error ---
+                loadingDiv.style.display = 'none';
+                analyzeButton.disabled = false; // Re-enable button
+                analyzeButton.textContent = 'Analyze';
+            }
+        }
+
+        // Updated helper function to display errors
+        // Takes an optional second parameter to control hiding the result div
+        function displayError(message, hideResult = true) {
+            errorDiv.innerText = message;
+            errorDiv.style.display = 'block';
+            loadingDiv.style.display = 'none';
+             if (hideResult) {
+                resultDiv.style.display = 'none';
+             }
+            analyzeButton.disabled = false;
+            analyzeButton.textContent = 'Analyze';
+        }
+
+    </script>
+
+</body>
+</html>
